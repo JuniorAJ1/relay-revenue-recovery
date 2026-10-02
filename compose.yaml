@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    ports: ["127.0.0.1:8766:8000"]
+    env_file: .env
+    volumes: ["relay-data:/app/instance"]
+    restart: unless-stopped
+  worker:
+    build: .
+    command: ["python", "manage.py", "worker"]
+    env_file: .env
+    volumes: ["relay-data:/app/instance"]
+    restart: unless-stopped
+volumes:
+  relay-data:
