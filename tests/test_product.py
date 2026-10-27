@@ -33,6 +33,19 @@ class ProductTests(unittest.TestCase):
         self.assertEqual(self.client.post('/api/leads',json={'name':'x'}).status_code,403)
         self.assertEqual(anonymous.post('/api/auth/demo').status_code,403)
         self.assertIn('HttpOnly',self.client.post('/api/auth/demo',headers={'X-Relay-Request':'1'}).headers['Set-Cookie'])
+
+    def test_insight_resolves_through_appointment_and_payment_api(self):
+        db=connect(self.app.config['DATABASE_PATH'])
+        db.execute('UPDATE appointments SET starts_at=? WHERE id=1',((datetime.now(timezone.utc)-timedelta(hours=2)).isoformat(),))
+        db.close()
+        def ids(rule):
+            return {m['lead_id'] for r in self.workspace()['insights']['rules'] if r['id']==rule for m in r['matches']}
+        self.assertIn(14,ids('attendance'))
+        self.assertEqual(self.post('/appointments/1',{'action':'attend'}).status_code,200)
+        self.assertNotIn(14,ids('attendance'))
+        self.assertIn(14,ids('unsettled'))
+        self.assertEqual(self.post('/leads/14/payments',{'amount':'100','reference':'verified-insight-settlement'}).status_code,201)
+        self.assertNotIn(14,ids('unsettled'))
     def test_login_rate_limit_and_logout(self):
         for _ in range(5):
             self.assertEqual(self.client.post('/api/auth/login',json={'email':'demo@relay.local','password':'wrong'},headers={'X-Relay-Request':'1'}).status_code,401)

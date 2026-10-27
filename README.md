@@ -1,13 +1,20 @@
 # Relay — Revenue Recovery
 
-**A working lead-recovery app for sales teams that measure cash collected.**
+**A sales recovery workspace for finding pipeline gaps and following outcomes through to collected cash.**
 
-Relay gives neglected leads a reviewed follow-up, tracks the next appointment, and reconciles settlements and refunds. A Flask API, persistent SQLite database, and separate delivery worker power the product. Business rules run on the server.
+Relay helps operators spot neglected leads, review the next follow-up, manage appointments, and reconcile settlements and refunds. Its dashboard connects each signal to the underlying lead and transaction history. A Flask API, SQLite database, and separate delivery worker power the persistent product; an isolated Vercel walkthrough makes the workflow easy to try.
+
+[Product walkthrough](#two-minute-walkthrough) · [Screenshots](#screenshots) · [Run locally](#persistent-local-workspace) · [Architecture](#architecture)
 
 ![Relay recovery workspace](preview.jpg)
 
+*Recovery overview with owner/source filters, recorded net collections, current pipeline stages and evidence-linked review signals. All names and amounts shown are fictional sample data.*
+
 ## Product capabilities
 
+- **Operational overview:** owner/source filters, collection windows, an inspectable net-cash chart, source breakdowns and current stage distribution, all computed from saved records.
+- **Explainable leak detector:** server-derived checks for delivery exceptions, missing recovery ownership, unrecorded attendance, attendance without a settlement, quiet follow-ups and eligible recovery opportunities. Flags link to the original lead and never grant outreach permission or assert lost revenue.
+- **Operations report:** CSV export of filtered pipeline signals and collection-window transactions, with spreadsheet formula protection.
 - **Server-side sign-in:** hashed passwords, expiring database sessions, HttpOnly cookies, CSRF protection and login attempt limits.
 - **Lead management:** create/edit, search/filter, atomic CSV import, and spreadsheet-safe CSV export.
 - **Reviewed recovery:** editable contextual email templates, permission evidence, ownership, human approval and scheduling.
@@ -20,7 +27,42 @@ Relay gives neglected leads a reviewed follow-up, tracks the next appointment, a
 - **CRM contact lookup:** credential-gated Close and HighLevel import by contact ID. HighLevel includes location checks and a DND recheck before live sends. Imported contacts start without outreach permission.
 - **Separate demo workspace:** fictional data and simulated delivery using the same database and scheduling rules.
 
+## Screenshots
+
+### Pipeline leak detector
+
+Six explainable checks turn recorded pipeline gaps into a review queue. Operators can inspect the evidence and open the original lead before taking action.
+
+![Relay pipeline leak detector with rule filters, evidence and suggested next steps](docs/images/leak-detector.jpg)
+
+<details>
+<summary>Mobile workspace</summary>
+<br>
+<img src="docs/images/mobile-workspace.jpg" alt="Relay recovery overview on a phone, with responsive navigation, metrics and collection charts" width="320">
+</details>
+
+These images show the deployed sample walkthrough. Collections are fictional, delivery is simulated, and edits belong to the visitor's browser.
+
 ## Run the demo
+
+### Shareable Vercel walkthrough
+
+[Open the hosted preview](https://relay-recovery-preview-5h65c1hvb-jr-3f25.vercel.app/). Deployment Protection is enabled; visitors need a current share link from the owner. Expiring access tokens are kept out of this repository. See [deployment notes](DEPLOYMENT.md).
+
+The Vercel entrypoint `app.py` serves an isolated interactive walkthrough through
+`relay/preview.py`. It reuses the product's Flask routes and business rules inside
+a fresh temporary database for each operation. Only business records are returned
+to the visitor's browser; users, sessions and credentials are never serialized.
+Sample edits are stored in browser local storage and can be reset. No shared
+customer database, live CRM import, email delivery or actual payment processing
+is enabled. Use fictional data only.
+
+The Vercel deployment source is an explicit allowlist: the preview entrypoint,
+Python modules, static assets, requirements and Python version. Local databases,
+environment files, Git metadata and prototype files are excluded. The persistent
+single-workspace product below continues to use `wsgi.py` / `manage.py`.
+
+### Persistent local workspace
 
 Requires **Python 3.12+**. Node is only needed for the optional JavaScript syntax check.
 
@@ -48,13 +90,13 @@ The worker polls every five seconds and processes up to 20 jobs per cycle. `pyth
 
 ## Two-minute walkthrough
 
-1. Open a ready lead and inspect its context and permission evidence.
-2. Generate a template, edit it, and approve a send time in your local timezone.
-3. Inspect the delivery desk. Demo delivery is explicitly marked **simulated**.
-4. Record a booked reply. Queued recovery emails are cancelled.
-5. Approve a reminder, then reschedule. Old reminders are cancelled and replacements need review.
-6. Record attendance, a settlement with a unique reference, and a partial refund.
-7. Inspect the cash ledger and audit trail; refresh to confirm persistence.
+1. Explore the overview: filter by owner or source, change the collection window, and select a chart date to inspect its transactions.
+2. Open the leak detector and choose a signal to inspect its evidence and suggested next step.
+3. Review an eligible lead's context and permission evidence. Generate a template, edit it, and approve a send time in your local timezone.
+4. Inspect the delivery desk and run the demo worker for due jobs. Delivery is explicitly marked **simulated**.
+5. Record a booked reply. Queued recovery emails are cancelled. Approve a reminder, then reschedule to see the old reminder cancelled.
+6. Record attendance, a settlement with a unique reference, and a partial refund. Inspect the cash ledger and audit trail.
+7. Refresh to confirm persistence. In the hosted walkthrough, use **Reset workspace** to restore the fictional starting records.
 
 ## Live pilot setup
 
@@ -134,12 +176,15 @@ Browser → Flask API → SQLite (sessions, leads, jobs, appointments, payments,
 | Location | Responsibility |
 | --- | --- |
 | relay/app.py | HTTP API, authentication, exports and unsubscribe |
+| relay/insights.py | Read-only pipeline rules and evidence for review signals |
 | relay/service.py | Lead, appointment, scheduling and financial rules |
 | relay/db.py | Schema, transactions and startup migration |
 | relay/worker.py | Durable claiming, send-time checks and SMTP |
 | relay/connectors.py | Read-only CRM contact adapters |
 | relay/seed.py | Fictional demo data |
+| app.py / relay/preview.py | Vercel entrypoint and isolated browser-held sample walkthrough |
 | static/ | Separate frontend HTML, CSS and JavaScript |
+| docs/images/ / preview.jpg | Screenshots of the deployed sample workspace |
 | tests/ | API, ledger, scheduling, worker and adapter tests |
 | prototype/ | Original standalone concept retained for reference |
 
@@ -148,13 +193,16 @@ Browser → Flask API → SQLite (sessions, leads, jobs, appointments, payments,
 ```bash
 python -m unittest discover -s tests -v
 node --check static/app.js
+node --check static/dashboard.js
 ```
 
-The 26 automated tests cover authentication/CSRF, login limits, mode separation, protected leads, atomic import, export injection protection, persistence, concurrent claiming, unsubscribe, SMTP TLS/message construction, unknown delivery, stale reminders, duplicate transactions and refund bounds. SMTP and CRM adapters use mocks; real credentials were not available for live verification.
+The 43 automated tests cover authentication/CSRF, login limits, mode separation, protected leads, atomic import, export injection protection, persistence, concurrent claiming, unsubscribe, SMTP TLS/message construction, unknown delivery, stale reminders, duplicate transactions and refund bounds, plus read-only insight rules, recent-send handling, flag resolution through appointment/payment APIs, isolated preview state, forbidden integration routes, snapshot validation, preview exports, and the full simulated preview workflow. SMTP and CRM adapters use mocks; real credentials were not available for live verification.
 
-Browser verification covered approval, booking, reminder cancellation on reschedule, attendance, settlement, refund, and persistence after a server restart. Pinned Python dependencies were checked with `pip-audit`; no known vulnerabilities were reported at the final scan. GitHub Actions runs the suite and JavaScript syntax check.
+Browser verification covered approval, booking, reminder cancellation on reschedule, attendance, settlement, refund, and persistence after a server restart. The dashboard update was also checked at desktop and phone widths: owner/source filtering, an empty filter combination, collection windows, chart-to-transaction inspection, filtered queue navigation, leak-to-lead review, CSV download and every existing route. Browser warnings/errors were empty during the final pass. Pinned Python dependencies were checked with `pip-audit`; no known vulnerabilities were reported at the final scan. GitHub Actions runs the suite and JavaScript syntax check.
 
 ## Current boundaries
+
+See [Product direction](PRODUCT_DIRECTION.md) for the proposed CRM reconciliation, payment evidence and operational ownership roadmap. The dashboard is a point-in-time snapshot: refresh to recalculate. Collection charts use UTC dates and show attributed net cash; current pipeline checks and cohort comparisons explicitly use all recorded time. No new live integration is implied by the overview.
 
 Drafting uses **contextual templates, not an AI model**. SMS, OAuth onboarding, continuous CRM sync, automatic replies, calendar-provider sync, payment webhooks, multi-currency accounting, role-based access and multiple-workspace isolation are not implemented. Reply-based opt-outs require operator handling; the signed unsubscribe link updates the app automatically.
 

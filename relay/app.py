@@ -13,6 +13,7 @@ from werkzeug.security import check_password_hash
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from .db import connect, init, transaction, now, event, record
 from . import service, connectors
+from .insights import snapshot
 
 ROOT=Path(__file__).resolve().parent.parent
 
@@ -148,9 +149,10 @@ def create_app(overrides=None):
             lead['idle']=max(0,(datetime.now(timezone.utc)-datetime.fromisoformat(lead['last_touch'])).days)
             lead['gross']=sum(p['cents'] for p in payments if p['lead_id']==lead['id'] and p['kind']=='settlement')
             lead['refunds']=sum(p['cents'] for p in payments if p['lead_id']==lead['id'] and p['kind']=='refund')
-        return jsonify(leads=leads,payments=payments,
-          jobs=[record(x) for x in g.db.execute('SELECT * FROM jobs ORDER BY id DESC')],
-          appointments=[record(x) for x in g.db.execute('SELECT * FROM appointments ORDER BY id DESC')],
+        jobs=[record(x) for x in g.db.execute('SELECT * FROM jobs ORDER BY id DESC')]
+        appointments=[record(x) for x in g.db.execute('SELECT * FROM appointments ORDER BY id DESC')]
+        return jsonify(leads=leads,payments=payments,jobs=jobs,appointments=appointments,
+          insights=snapshot(leads,jobs,appointments,payments),
           integrations={'close':bool(app.config['CLOSE_API_KEY']),
             'highlevel':bool(app.config['HIGHLEVEL_TOKEN'] and app.config['HIGHLEVEL_LOCATION_ID']),
             'smtp':bool(app.config['SMTP_HOST'] and app.config['SMTP_FROM']),
